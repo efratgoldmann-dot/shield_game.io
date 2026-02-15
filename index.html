@@ -203,6 +203,7 @@
         const enemyNoiseSprite2 = new Image(); enemyNoiseSprite2.src = 'Enemies/Error1.png';
         const enemyEliteSprite = new Image(); enemyEliteSprite.src = 'Enemies/Report Error.png';
         const magnetSprite = new Image(); magnetSprite.src = 'magnet.png';
+        const piSprite = new Image(); piSprite.src = 'AbilityIcons/Pi.png';
 
         // --- BRAND DATA ---
         const storeData = [
@@ -230,6 +231,7 @@
             store.img.src = store.file;
             store.img.onload = checkLoad;
         });
+        piSprite.onload = checkLoad;
 
         // --- AUDIO ENGINE (8-BIT SYNTH) ---
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -350,6 +352,7 @@
         let bullets = [];
         let enemies = [];
         let gems = [];
+        let piPickups = [];
         let damageNumbers = [];
         let particles = [];
         let storeLocations = [];
@@ -363,7 +366,8 @@
             speed: '<img src="AbilityIcons/ChainLandscape.png" width="20" height="20" alt="Market Landscape" />',
             heal: '<img src="AbilityIcons/Loyalty.png" width="20" height="20" alt="Loyalty" />',
             multi: '<img src="AbilityIcons/Cannibalization.png" width="20" height="20" alt="Cannibalization" />',
-            pierce: '<img src="AbilityIcons/VoidAnalysis.png" width="20" height="20" alt="Void Analysis" />'
+            pierce: '<img src="AbilityIcons/VoidAnalysis.png" width="20" height="20" alt="Void Analysis" />',
+            pi: '<img src="AbilityIcons/Pi.png" width="20" height="20" alt="Pi" />'
         };
 
         const possibleUpgrades = [
@@ -428,6 +432,21 @@
             return false;
         }
         
+        function explodeAllEnemies(originX, originY) {
+            if (enemies.length === 0) return;
+            let totalScore = 0;
+            enemies.forEach(e => {
+                totalScore += e.xpValue || 10;
+                for (let k = 0; k < 20; k++) particles.push(new Particle(e.x, e.y, '#e74c3c'));
+                gems.push(new Gem(e.x, e.y, e.xpValue || 5, '#f1c40f'));
+            });
+            enemies = [];
+            score += totalScore;
+            document.getElementById('score-display').innerText = score;
+            damageNumbers.push(new DamageText(originX, originY, 'π NUKED', '#f1c40f'));
+            playSound('levelup');
+        }
+        
         class MagnetPickup {
             constructor(x, y) {
                 this.x = x; this.y = y;
@@ -442,6 +461,23 @@
                     ctx.fillStyle = '#ecf0f1';
                     ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.arc(x - 10, y + 5, 8, 0, Math.PI * 2); ctx.arc(x + 10, y + 5, 8, 0, Math.PI * 2); ctx.fill();
                     ctx.fillStyle = '#3498db'; ctx.font = '10px Arial'; ctx.fillText("DATA SYNC", x - 25, y - 15);
+                }
+            }
+        }
+
+        class PiPickup {
+            constructor(x, y) {
+                this.x = x; this.y = y;
+                this.size = 34; this.bobOffset = 0;
+            }
+            update() { this.bobOffset = Math.sin(frame * 0.12) * 6; }
+            draw(ctx, camX, camY) {
+                if (piSprite.complete && piSprite.naturalWidth !== 0) {
+                    ctx.drawImage(piSprite, this.x - camX - this.size/2, this.y - camY - this.size/2 + this.bobOffset, this.size, this.size);
+                } else {
+                    const x = this.x - camX; const y = this.y - camY + this.bobOffset;
+                    ctx.fillStyle = '#f39c12'; ctx.beginPath(); ctx.arc(x, y, 16, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = '#000'; ctx.font = '16px Arial'; ctx.fillText('π', x-6, y+6);
                 }
             }
         }
@@ -769,6 +805,10 @@
                             if (e.isBoss) gemColor = '#f1c40f'; // Gold gem for Boss
                             
                             gems.push(new Gem(e.x, e.y, e.xpValue, gemColor));
+                            // Very rare chance to spawn the Pi collectible
+                            if (Math.random() < 0.002) {
+                                piPickups.push(new PiPickup(e.x, e.y));
+                            }
                             enemies.splice(j, 1);
                             score += e.xpValue;
                             document.getElementById('score-display').innerText = score;
@@ -829,6 +869,15 @@
                     gems.forEach(g => g.beingSucked = true);
                     playSound('magnet'); 
                     magnetPickups.splice(i, 1);
+                }
+            }
+
+            for (let i = piPickups.length - 1; i >= 0; i--) {
+                const p = piPickups[i];
+                if (Math.hypot(player.worldX - p.x, player.worldY - p.y) < (player.size/2 + p.size/2)) {
+                    explodeAllEnemies(player.worldX, player.worldY);
+                    playSound('powerup');
+                    piPickups.splice(i, 1);
                 }
             }
 
@@ -973,6 +1022,7 @@
             });
 
             magnetPickups.forEach(m => m.draw(ctx, camX, camY));
+            piPickups.forEach(p => p.draw(ctx, camX, camY));
             storeLocations.forEach(h => h.draw(ctx, camX, camY));
             gems.forEach(g => g.draw(ctx, camX, camY));
             bullets.forEach(b => b.draw(ctx, camX, camY));
