@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Placer.ai: Audio Survivor</title>
+    <title>Placer.ai: Survivor</title>
     <style>
         body {
             margin: 0;
@@ -20,55 +20,63 @@
             top: 10px; left: 10px;
             pointer-events: none;
             z-index: 10;
+            font-family: 'Courier New', monospace;
+            background: #3E44C6;
+            padding: 15px;
+            border: 1px solid rgba(103, 109, 253, 0.4);
+            border-radius: 4px;
+            color: white;
         }
         .bar-container {
             width: 250px; height: 20px;
-            background: #333;
-            border: 2px solid #555;
-            margin-bottom: 5px;
+            background: #232B7F;
+            border: 1px solid #676DFD;
+            margin-bottom: 8px;
             position: relative;
         }
         .bar-fill {
             height: 100%; width: 0%;
             transition: width 0.2s;
         }
-        #hp-bar { background-color: #2ecc71; width: 100%; } 
-        #xp-bar { background-color: #676DFD; } 
+        #hp-bar { background-color: #BED2FF; width: 100%; } 
+        #xp-bar { background-color: #FFB748; } 
         
-        h1 { margin: 0; font-size: 20px; text-shadow: 2px 2px 0 #000; letter-spacing: 1px;}
-        .label { font-size: 12px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+        h1 { margin: 0 0 10px 0; font-size: 18px; text-shadow: 2px 2px 0 #000; letter-spacing: 2px; font-family: 'Courier New', monospace; font-weight: bold;}
+        .label { font-size: 11px; color: white; text-transform: uppercase; letter-spacing: 1px; margin-top: 8px; }
         
         #powers-list {
-            margin-top: 15px;
+            margin-top: 12px;
             display: flex;
             flex-direction: column;
-            gap: 5px;
+            gap: 6px;
         }
         .power-item {
             display: flex;
             align-items: center;
-            background: rgba(103, 109, 253, 0.2);
-            padding: 5px 10px;
-            border-radius: 4px;
+            background: rgba(40, 50, 100, 0.5);
+            padding: 6px 10px;
+            border-radius: 3px;
             width: fit-content;
-            border-left: 3px solid #676DFD;
-            font-size: 14px;
+            border-left: 2px solid #676DFD;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
         }
         .power-icon { margin-right: 8px; font-size: 16px; }
         .power-count { font-weight: bold; color: #fff; margin-left: 5px; }
 
         #active-buffs {
-            margin-top: 20px;
+            margin-top: 12px;
             display: flex;
             flex-direction: column;
-            gap: 5px;
+            gap: 6px;
         }
         .buff-item {
             color: #f1c40f;
             font-weight: bold;
-            font-size: 14px;
+            font-size: 12px;
             text-shadow: 0 0 5px rgba(241, 196, 15, 0.5);
             animation: pulse 1s infinite;
+            font-family: 'Courier New', monospace;
         }
 
         #upgrade-screen {
@@ -133,36 +141,86 @@
         #game-over {
             display: none; position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            text-align: center; background: #1e1e24;
-            padding: 50px; border: 2px solid #e74c3c; z-index: 30;
+            text-align: center; background: #3E44C6;
+            padding: 50px; border: 2px solid #E5462C; z-index: 30;
             pointer-events: auto;
             box-shadow: 0 0 50px rgba(0,0,0,0.5);
+            min-width: 400px;
         }
-        button {
+        #game-over h1 {
+            color: #E5462C;
+            font-size: 36px;
+            margin: 0 0 20px 0;
+            letter-spacing: 2px;
+            font-family: 'Courier New', monospace;
+        }
+        #game-over p {
+            color: white;
+            font-size: 16px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+        }
+        #game-over button {
+            background: #BED2FF;
+            color: #3E44C6;
+            padding: 12px 40px;
+            font-size: 18px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 20px;
+            font-family: 'Courier New', monospace;
+        }
+        #game-over button:hover {
+            background: #ffffff;
+        }
+        #game-over #restart-hint {
+            color: white;
+            font-size: 12px;
+            margin-top: 15px;
+            font-family: 'Courier New', monospace;
+        }
+        #final-level {
+            font-size: 48px;
+            font-weight: bold;
+            color: white;
+            display: block;
+            margin: 10px 0 10px 0;
+        }
+        
+        .info-row {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: white;
+            margin-top: 6px;
+            letter-spacing: 1px;
+        }
+        .info-label {
+            color: white;
+        }
+        button:not(#game-over button) {
             padding: 12px 24px; font-size: 16px; cursor: pointer;
             background: #676DFD; color: white; border: none; font-weight: bold; 
             margin-top: 20px; border-radius: 4px;
         }
-        button:hover { background: #555ce0; }
-        
-        #restart-hint { margin-top: 10px; color: #aaa; font-size: 12px; }
-        #final-level { font-size: 28px; font-weight: bold; color: #fff; } /* Made stage text bigger */
+        button:not(#game-over button):hover { background: #555ce0; }
     </style>
 </head>
 <body>
 
     <div id="ui">
-        <h1>PLANNED DEVELOPMENT V.<span id="level-display">1.0</span></h1>
+        <h1>PLACER SURVIVOR V.<span id="level-display">1.0</span></h1>
         
-        <div class="label">Confidence Score</div>
+        <div class="label">REVENUE</div>
         <div class="bar-container"><div id="hp-bar" class="bar-fill"></div></div>
         
-        <div class="label">Trade Area Analysis</div>
+        <div class="label">HRR</div>
         <div class="bar-container"><div id="xp-bar" class="bar-fill"></div></div>
         
-        <div style="margin-top: 10px">Visits: <span id="score-display">0</span></div> <!-- Changed to Visits -->
-        <div>Uptime: <span id="time-display">0:00</span></div>
-        <div style="color: #777; font-size: 12px;">Lat/Long: <span id="coord-display">0, 0</span></div>
+        <div class="info-row"><span class="info-label">Visits:</span> <span id="score-display">0</span></div>
+        <div class="info-row"><span class="info-label">Uptime:</span> <span id="time-display">0:00</span></div>
+        <div class="info-row" style="font-size: 11px; color: #777;"><span class="info-label">Lat/Long:</span> <span id="coord-display">0, 0</span></div>
         
         <div id="powers-list"></div>
         <div id="active-buffs"></div>
@@ -182,10 +240,11 @@
     </div>
 
     <div id="game-over">
-        <h1 style="font-size: 30px; color: #e74c3c;">ANALYSIS FAILED</h1>
+        <h1>ANALYSIS FAILED</h1>
         <p>Market Landscape too volatile. Report Aborted.</p>
-        <p style="font-size: 16px; color: #aaa;">Development Stage: <br><span id="final-level">1.0</span></p>
-        <button onclick="location.reload()">RESTART QUERY</button>
+        <p style="font-size: 14px; margin-top: 20px;">Development Stage:</p>
+        <span id="final-level">1.0</span>
+        <button onclick="location.reload()">RESTART</button>
         <div id="restart-hint">Press ENTER to Restart</div>
     </div>
 
@@ -204,6 +263,16 @@
         const enemyEliteSprite = new Image(); enemyEliteSprite.src = 'Enemies/Report Error.png';
         const magnetSprite = new Image(); magnetSprite.src = 'magnet.png';
         const piSprite = new Image(); piSprite.src = 'AbilityIcons/Pi.png';
+        
+        // Barrier sprites
+        const barrierSprites = [
+            (() => { const img = new Image(); img.src = 'barriers /1.png'; return img; })(),
+            (() => { const img = new Image(); img.src = 'barriers /2.png'; return img; })(),
+            (() => { const img = new Image(); img.src = 'barriers /3.png'; return img; })(),
+            (() => { const img = new Image(); img.src = 'barriers /4.png'; return img; })(),
+            (() => { const img = new Image(); img.src = 'barriers /6.png'; return img; })(),
+            (() => { const img = new Image(); img.src = 'barriers /image 52.png'; return img; })()
+        ];
 
         // --- BRAND DATA ---
         const storeData = [
@@ -322,7 +391,7 @@
 
         // --- CONFIG & STATE ---
         const TILE_SIZE = 400; 
-        const OBSTACLE_SIZE = 60;
+        const OBSTACLE_SIZE = 120;
         
         let gameState = 'PLAYING';
         let isPaused = false; 
@@ -410,7 +479,10 @@
         function getObstacleAt(gridX, gridY) {
             const seed = Math.sin(gridX * 12.9898 + gridY * 78.233) * 43758.5453;
             const rand = seed - Math.floor(seed);
-            if (rand > 0.8) return { x: gridX * TILE_SIZE + (rand * 100), y: gridY * TILE_SIZE + (rand * 200), type: 'silo' };
+            if (rand > 0.8) {
+                const spriteIndex = Math.floor(rand * 10) % barrierSprites.length;
+                return { x: gridX * TILE_SIZE + (rand * 100), y: gridY * TILE_SIZE + (rand * 200), type: 'silo', spriteIndex: spriteIndex };
+            }
             return null;
         }
 
@@ -987,7 +1059,7 @@
                 ctx.translate(Math.random() * screenShake - screenShake/2, Math.random() * screenShake - screenShake/2);
             }
 
-            ctx.strokeStyle = '#2c2c36';
+            ctx.strokeStyle = '#3E44C6';
             ctx.lineWidth = 1;
             ctx.beginPath();
             const gridOffsetX = player.worldX % 100;
@@ -1005,10 +1077,13 @@
                 for (let r = startRow; r <= endRow; r++) {
                     const obs = getObstacleAt(c, r);
                     if (obs) {
-                        ctx.fillStyle = '#000';
-                        ctx.fillRect(obs.x - camX, obs.y - camY, OBSTACLE_SIZE, OBSTACLE_SIZE);
-                        ctx.strokeStyle = '#444';
-                        ctx.strokeRect(obs.x - camX, obs.y - camY, OBSTACLE_SIZE, OBSTACLE_SIZE);
+                        const sprite = barrierSprites[obs.spriteIndex];
+                        if (sprite.complete) {
+                            ctx.drawImage(sprite, obs.x - camX, obs.y - camY, OBSTACLE_SIZE, OBSTACLE_SIZE);
+                        } else {
+                            ctx.fillStyle = '#000';
+                            ctx.fillRect(obs.x - camX, obs.y - camY, OBSTACLE_SIZE, OBSTACLE_SIZE);
+                        }
                     }
                 }
             }
