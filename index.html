@@ -106,7 +106,8 @@
             border-color: #676DFD;
             box-shadow: 0 5px 20px rgba(103, 109, 253, 0.3);
         }
-        .card h3 { color: #676DFD; margin-top: 0; font-size: 18px;}
+        .card .card-icon { font-size: 56px; line-height: 1; margin-bottom: 12px; display: block; text-align: center; }
+        .card h3 { color: #676DFD; margin-top: 0; font-size: 18px; text-align: center; margin-bottom: 6px; }
         .card p { font-size: 13px; color: #ccc; line-height: 1.4; }
         
         #controls-hint {
@@ -205,6 +206,27 @@
             margin-top: 20px; border-radius: 4px;
         }
         button:not(#game-over button):hover { background: #555ce0; }
+        /* Mobile on-screen controls */
+        #mobile-controls { position: fixed; left: 18px; bottom: 18px; width: 160px; height: 160px; z-index: 50; display: none; user-select: none; }
+        .arrow-grid { position: relative; width: 100%; height: 100%; }
+        .arrow-btn {
+            position: absolute;
+            width: 56px; height: 56px;
+            border-radius: 12px;
+            background: rgba(0,0,0,0.45);
+            color: white; font-size: 28px; display: flex; align-items: center; justify-content: center;
+            border: 2px solid rgba(255,255,255,0.06);
+            box-shadow: 0 6px 18px rgba(0,0,0,0.6);
+            touch-action: none;
+        }
+        .arrow-btn:active { background: rgba(103,109,253,0.95); }
+        .arrow-up { left: 52px; top: 0; }
+        .arrow-left { left: 0; top: 52px; }
+        .arrow-right { right: 0; top: 52px; }
+        .arrow-down { left: 52px; bottom: 0; }
+        @media (max-width: 900px), (hover: none) {
+            #mobile-controls { display: block; }
+        }
     </style>
 </head>
 <body>
@@ -215,7 +237,7 @@
         <div class="label">REVENUE</div>
         <div class="bar-container"><div id="hp-bar" class="bar-fill"></div></div>
         
-        <div class="label">HRR</div>
+        <div class="label">ARR</div>
         <div class="bar-container"><div id="xp-bar" class="bar-fill"></div></div>
         
         <div class="info-row"><span class="info-label">Visits:</span> <span id="score-display">0</span></div>
@@ -250,6 +272,16 @@
 
     <canvas id="gameCanvas"></canvas>
 
+    <!-- Mobile arrow controls (visible on narrow / touch devices) -->
+    <div id="mobile-controls" aria-hidden="true">
+        <div class="arrow-grid">
+            <div id="arrow-up" class="arrow-btn arrow-up">▲</div>
+            <div id="arrow-left" class="arrow-btn arrow-left">◀</div>
+            <div id="arrow-right" class="arrow-btn arrow-right">▶</div>
+            <div id="arrow-down" class="arrow-btn arrow-down">▼</div>
+        </div>
+    </div>
+
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -258,9 +290,11 @@
 
         // --- ASSET LOADING ---
         const playerSprite = new Image(); playerSprite.src = 'player.png';
-        const enemyNoiseSprite = new Image(); enemyNoiseSprite.src = 'Enemies/Error.png';
-        const enemyNoiseSprite2 = new Image(); enemyNoiseSprite2.src = 'Enemies/Error1.png';
-        const enemyEliteSprite = new Image(); enemyEliteSprite.src = 'Enemies/Report Error.png';
+        const enemyNoiseSprite = new Image(); enemyNoiseSprite.src = 'Enemies/5508.png';
+        const enemyNoiseSprite2 = new Image(); enemyNoiseSprite2.src = 'Enemies/5513.png';
+        const enemyEliteSprite = new Image(); enemyEliteSprite.src = 'Enemies/5518.png';
+            const enemy5520Sprite = new Image(); enemy5520Sprite.src = 'Enemies/5520.png';
+        const enemy5526Sprite = new Image(); enemy5526Sprite.src = 'Enemies/5526.png';
         const magnetSprite = new Image(); magnetSprite.src = 'magnet.png';
         const piSprite = new Image(); piSprite.src = 'AbilityIcons/Pi.png';
         
@@ -295,6 +329,8 @@
         enemyNoiseSprite.onload = checkLoad;
         enemyNoiseSprite2.onload = checkLoad;
         enemyEliteSprite.onload = checkLoad;
+            enemy5520Sprite.onload = checkLoad;
+        enemy5526Sprite.onload = checkLoad;
         storeData.forEach(store => {
             store.img = new Image();
             store.img.src = store.file;
@@ -390,6 +426,16 @@
         }
 
         // --- CONFIG & STATE ---
+
+        function isInView(x, y) {
+            const camX = player.worldX - canvas.width / 2;
+            const camY = player.worldY - canvas.height / 2;
+            return x > camX && x < camX + canvas.width && y > camY && y < camY + canvas.height;
+        }
+
+        function typeInView(type) {
+            return storeLocations.some(s => s.type === type && isInView(s.x, s.y));
+        }
         const TILE_SIZE = 400; 
         const OBSTACLE_SIZE = 120;
         
@@ -414,7 +460,20 @@
             bulletSpeed: 5.04, 
             bulletDamage: 25,
             projectileCount: 1, piercing: 0,
-            recoilX: 0, recoilY: 0 
+            recoilX: 0, recoilY: 0,
+            abilities: {
+                newDataset: 1,
+                trueTradeArea: 0,
+                crossShoppingAnalytics: 0,
+                voidAnalysis: 0,
+                mobilePanel: 0,
+                geoFencing: 0,
+                forecasting: 0
+            },
+            shieldHP: 0,
+            shieldMax: 0,
+            ceasefireTimer: 0,
+            techTimer: 0
         };
 
         const keys = {};
@@ -428,34 +487,103 @@
         let magnetPickups = []; 
         let trail = []; 
         
-        // Ability icons: use image files from the AbilityIcons folder
+        // Ability icons (now simple emojis representing each analytics ability)
         const AbilityIcons = {
-            rapid: '<img src="AbilityIcons/RapidRefresh.png" width="20" height="20" alt="Rapid Refresh" />',
-            might: '<img src="AbilityIcons/TradeAreaAnalysis.png" width="20" height="20" alt="Area Analysis" />',
-            speed: '<img src="AbilityIcons/ChainLandscape.png" width="20" height="20" alt="Market Landscape" />',
-            heal: '<img src="AbilityIcons/Loyalty.png" width="20" height="20" alt="Loyalty" />',
-            multi: '<img src="AbilityIcons/Cannibalization.png" width="20" height="20" alt="Cannibalization" />',
-            pierce: '<img src="AbilityIcons/VoidAnalysis.png" width="20" height="20" alt="Void Analysis" />',
-            pi: '<img src="AbilityIcons/Pi.png" width="20" height="20" alt="Pi" />'
+            newDataset: '💾',
+            trueTradeArea: '🌐',
+            crossShoppingAnalytics: '🔀',
+            voidAnalysis: '🔦',
+            mobilePanel: '📱',
+            geoFencing: '🛡️',
+            forecasting: '🔮'
         };
 
-        const possibleUpgrades = [
-            { id: 'rapid', iconId: 'rapid', name: 'Rapid Refresh', count: 0, desc: 'Update Metrics 15% Faster', apply: () => player.fireRate = Math.max(5, Math.floor(player.fireRate * 0.85)) },
-            { id: 'might', iconId: 'might', name: 'Area Analysis', count: 0, desc: '+15 Insight Power', apply: () => player.bulletDamage += 15 },
-            { id: 'speed', iconId: 'speed', name: 'Market Landscape', count: 0, desc: 'Navigate Market +15% Faster', apply: () => player.speed *= 1.15 },
-            { id: 'heal', iconId: 'heal', name: 'Loyalty Program', count: 0, desc: 'Restore Confidence & Retention', apply: () => { player.maxHp += 20; player.hp = player.maxHp; } },
-            { id: 'multi', iconId: 'multi', name: 'Cannibalization', count: 0, desc: 'Analyze +1 Store Overlay', apply: () => player.projectileCount++ },
-            { id: 'pierce', iconId: 'pierce', name: 'Void Analysis', count: 0, desc: 'Identify Gaps (Pierce +1)', apply: () => player.piercing++ }
-        ];
+        // metadata describing each of the seven new abilities
+        const abilityInfo = {
+            newDataset: {
+                id: 'newDataset',
+                name: 'New Dataset',
+                mechanic: 'Auto-fire nearest enemy',
+                maxLevel: 5,
+                getImprovement: lvl => `Fire rate +${Math.floor(lvl*10)}%, damage +${Math.floor(lvl*15)}%`
+            },
+            trueTradeArea: {
+                id: 'trueTradeArea',
+                name: 'True Trade Area',
+                mechanic: 'Damage aura around you',
+                maxLevel: 5,
+                getImprovement: lvl => `Aura radius +${lvl*12}`
+            },
+            crossShoppingAnalytics: {
+                id: 'crossShoppingAnalytics',
+                name: 'Cross-Shopping Analytics',
+                mechanic: 'Multi-shot spread',
+                maxLevel: 5,
+                getImprovement: lvl => `${1+lvl} projectiles`
+            },
+            voidAnalysis: {
+                id: 'voidAnalysis',
+                name: 'Void Analysis',
+                mechanic: 'Piercing heavy attack',
+                maxLevel: 5,
+                getImprovement: lvl => `Pierce +${lvl*2}`
+            },
+            mobilePanel: {
+                id: 'mobilePanel',
+                name: 'Mobile Panel',
+                mechanic: 'Speed & damaging trail',
+                maxLevel: 5,
+                getImprovement: lvl => `Speed +${lvl*5}%`
+            },
+            geoFencing: {
+                id: 'geoFencing',
+                name: 'Geo-Fencing',
+                mechanic: 'Regenerating shield',
+                maxLevel: 5,
+                getImprovement: lvl => `Shield strength +${lvl*50}`
+            },
+            forecasting: {
+                id: 'forecasting',
+                name: 'Forecasting',
+                mechanic: 'Auto-targeting drone',
+                maxLevel: 5,
+                getImprovement: lvl => `${lvl} drone(s)`
+            }
+        };
+
+        // additional collections used by the new abilities
+        let drones = [];
+        let voidBeams = [];
 
         function generateWorldStores() {
             for(let i=0; i<60; i++) {
-                const angle = Math.random() * Math.PI * 2;
-                const dist = Math.random() * 10000 + 500; 
-                storeLocations.push(new StoreLocation(
-                    player.worldX + Math.cos(angle) * dist,
-                    player.worldY + Math.sin(angle) * dist
-                ));
+                addStore();
+            }
+        }
+
+        function addStore() {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * 10000 + 500;
+            // pick a random brand but avoid duplicates of that type in view
+            let attempts = 0;
+            let chosen;
+            while(attempts < 5) {
+                const candidate = storeData[Math.floor(Math.random() * storeData.length)];
+                if (!typeInView(candidate.type)) { chosen = candidate; break; }
+                attempts++;
+            }
+            if (!chosen) chosen = storeData[Math.floor(Math.random() * storeData.length)];
+            storeLocations.push(new StoreLocation(
+                player.worldX + Math.cos(angle) * dist,
+                player.worldY + Math.sin(angle) * dist,
+                chosen // pass chosen to constructor? or set after
+            ));
+        }
+
+        function ensureStores() {
+            // keep at least 40 stores in play by spawning new ones as needed
+            while (storeLocations.length < 40) {
+                addStore();
             }
         }
 
@@ -475,6 +603,41 @@
             keys[e.key] = true;
         });
         window.addEventListener('keyup', e => keys[e.key] = false);
+
+        // Mobile / touch control setup: map on-screen arrows to arrow key states
+        function addPointerHandler(elem, keyName) {
+            if (!elem) return;
+            const setDown = (ev) => { ev.preventDefault(); keys[keyName] = true; };
+            const setUp = (ev) => { ev.preventDefault(); keys[keyName] = false; };
+            elem.addEventListener('pointerdown', setDown);
+            elem.addEventListener('pointerup', setUp);
+            elem.addEventListener('pointercancel', setUp);
+            elem.addEventListener('pointerleave', setUp);
+            // fallback for older touch events
+            elem.addEventListener('touchstart', setDown, {passive:false});
+            elem.addEventListener('touchend', setUp);
+            elem.addEventListener('touchcancel', setUp);
+            // also support mouse events
+            elem.addEventListener('mousedown', setDown);
+            elem.addEventListener('mouseup', setUp);
+        }
+
+        function setupMobileControls() {
+            const up = document.getElementById('arrow-up');
+            const left = document.getElementById('arrow-left');
+            const right = document.getElementById('arrow-right');
+            const down = document.getElementById('arrow-down');
+            addPointerHandler(up, 'ArrowUp');
+            addPointerHandler(left, 'ArrowLeft');
+            addPointerHandler(right, 'ArrowRight');
+            addPointerHandler(down, 'ArrowDown');
+            // prevent the browser from panning on touch drags
+            const container = document.getElementById('mobile-controls');
+            if (container) container.style.touchAction = 'none';
+        }
+
+        // initialize mobile controls (visible via CSS on touch/narrow screens)
+        setupMobileControls();
 
         function getObstacleAt(gridX, gridY) {
             const seed = Math.sin(gridX * 12.9898 + gridY * 78.233) * 43758.5453;
@@ -575,11 +738,12 @@
         }
 
         class StoreLocation {
-            constructor(x, y) {
+            // storeObj optional allows caller to force a particular brand
+            constructor(x, y, storeObj) {
                 this.x = x; this.y = y;
                 this.size = 75; 
                 this.bobOffset = 0;
-                const randomStore = storeData[Math.floor(Math.random() * storeData.length)];
+                const randomStore = storeObj || storeData[Math.floor(Math.random() * storeData.length)];
                 this.sprite = randomStore.img;
                 this.label = randomStore.label;
                 this.name = randomStore.name;
@@ -616,20 +780,75 @@
                 if (buffs.damage > 0) color = '#e74c3c'; 
                 if (buffs.rapid > 0) color = '#f1c40f'; 
 
-                if (this.pierce > 0) {
-                    ctx.shadowBlur = 10; ctx.shadowColor = color;
-                    ctx.fillStyle = '#fff';
-                    ctx.beginPath(); ctx.arc(this.x - camX, this.y - camY, this.radius + 2, 0, Math.PI * 2); ctx.fill();
+                if (this.type === 'newDataset') {
+                    color = '#00f';
+                    if (this.visualLevel >= 5) {
+                        ctx.strokeStyle = 'cyan';
+                        ctx.lineWidth = 4;
+                        ctx.beginPath();
+                        ctx.moveTo(this.x - camX, this.y - camY);
+                        ctx.lineTo(this.x - camX - this.dx*2, this.y - camY - this.dy*2);
+                        ctx.stroke();
+                    } else if (this.visualLevel >= 3) {
+                        ctx.strokeStyle = 'cyan';
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([5,5]);
+                        ctx.beginPath();
+                        ctx.moveTo(this.x - camX, this.y - camY);
+                        ctx.lineTo(this.x - camX - this.dx*1.5, this.y - camY - this.dy*1.5);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                    } else {
+                        ctx.fillStyle = color;
+                        ctx.beginPath();
+                        ctx.arc(this.x - camX, this.y - camY, this.radius, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                } else if (this.type === 'void') {
+                    color = '#a020f0';
+                    if (this.visualLevel >= 5) {
+                        ctx.fillStyle = color;
+                        ctx.fillRect(this.x - camX - 4, this.y - camY - 4, 8, 8);
+                    } else if (this.visualLevel >= 3) {
+                        ctx.fillStyle = color;
+                        ctx.fillRect(this.x - camX - 3, this.y - camY - 3, 6, 6);
+                    } else {
+                        ctx.fillStyle = color;
+                        ctx.beginPath();
+                        ctx.arc(this.x - camX, this.y - camY, this.radius, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                } else if (this.type === 'tech') {
+                    // highly destructive visual
+                    ctx.strokeStyle = 'red';
+                    ctx.lineWidth = 6;
+                    ctx.shadowBlur = 20;
+                    ctx.shadowColor = 'orange';
+                    ctx.beginPath();
+                    ctx.moveTo(this.x - camX, this.y - camY);
+                    ctx.lineTo(this.x - camX - this.dx*3, this.y - camY - this.dy*3);
+                    ctx.stroke();
                     ctx.shadowBlur = 0;
+                } else if (this.type === 'drone') {
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(this.x - camX - 2, this.y - camY - 2, 4, 4);
                 } else {
-                    ctx.fillStyle = color;
-                    ctx.beginPath(); ctx.arc(this.x - camX, this.y - camY, this.radius, 0, Math.PI * 2); ctx.fill();
+                    if (this.pierce > 0) {
+                        ctx.shadowBlur = 10; ctx.shadowColor = color;
+                        ctx.fillStyle = '#fff';
+                        ctx.beginPath(); ctx.arc(this.x - camX, this.y - camY, this.radius + 2, 0, Math.PI * 2); ctx.fill();
+                        ctx.shadowBlur = 0;
+                    } else {
+                        ctx.fillStyle = color;
+                        ctx.beginPath(); ctx.arc(this.x - camX, this.y - camY, this.radius, 0, Math.PI * 2); ctx.fill();
+                    }
                 }
             }
         }
 
         class Enemy {
-            constructor(isElite = false, isBoss = false) {
+            constructor(isElite = false, isBoss = false, variant = null) {
+                this.lastRepelFrame = 0; // used to throttle pushback
                 const angle = Math.random() * Math.PI * 2;
                 const dist = Math.max(canvas.width, canvas.height) / 2 + 100;
                 this.x = player.worldX + Math.cos(angle) * dist;
@@ -639,8 +858,27 @@
                 const difficultyMultiplier = 1 + (timeSeconds / 120);
                 this.isElite = isElite;
                 this.isBoss = isBoss;
+                this.variant = variant;
 
-                if (this.isBoss) {
+                // special variant using 5520.png
+                if (this.variant === '5520') {
+                    this.size = 50;
+                    this.speed = (0.9 + (player.level * 0.006)) * difficultyMultiplier;
+                    this.hp = (40 + (player.level * 10)) * difficultyMultiplier;
+                    this.color = '#22aacc';
+                    this.xpValue = 15;
+                    this.sprite = enemy5520Sprite;
+                    this.mass = 1.2;
+                } else if (this.variant === '5526') {
+                    // second special variant using 5526.png
+                    this.size = 80;
+                    this.speed = (0.6 + (player.level * 0.004)) * difficultyMultiplier;
+                    this.hp = (120 + (player.level * 30)) * difficultyMultiplier;
+                    this.color = '#aa22cc';
+                    this.xpValue = 80;
+                    this.sprite = enemy5526Sprite;
+                    this.mass = 3.0;
+                } else if (this.isBoss) {
                     this.size = 140; // BIGGEST
                     this.speed = (0.5 + (player.level * 0.002)) * difficultyMultiplier; 
                     this.hp = (500 + (player.level * 100)) * difficultyMultiplier;
@@ -723,14 +961,94 @@
             }
         }
 
+        // small orbiting drone used by forecasting ability
+        class Drone {
+            constructor(angle) { this.angle = angle; }
+            update() { this.angle += 0.03; }
+            draw(ctx, camX, camY) {
+                const x = player.worldX + Math.cos(this.angle) * 80 - camX;
+                const y = player.worldY + Math.sin(this.angle) * 80 - camY;
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(x-5, y-5, 10, 10);
+            }
+            getPosition() {
+                return {
+                    x: player.worldX + Math.cos(this.angle) * 80,
+                    y: player.worldY + Math.sin(this.angle) * 80
+                };
+            }
+        }
+
+        // beam used for void analysis ability
+        class VoidBeam {
+            constructor(angle, level) {
+                this.x = player.worldX;
+                this.y = player.worldY;
+                this.angle = angle;
+                this.life = 60;
+                this.level = level;
+                this.hitEnemies = new Set();
+            }
+            update() {
+                this.life--;
+            }
+            draw(ctx, camX, camY) {
+                const len = Math.max(canvas.width, canvas.height) * 1.5;
+                const endX = this.x + Math.cos(this.angle) * len;
+                const endY = this.y + Math.sin(this.angle) * len;
+                ctx.save();
+                if (this.level >= 5) {
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 8;
+                    ctx.shadowBlur = 20;
+                    ctx.shadowColor = '#a020f0';
+                } else if (this.level >= 3) {
+                    ctx.strokeStyle = '#a020f0';
+                    ctx.lineWidth = 6;
+                } else {
+                    ctx.strokeStyle = '#a020f0';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([10, 10]);
+                }
+                ctx.beginPath();
+                ctx.moveTo(this.x - camX, this.y - camY);
+                ctx.lineTo(endX - camX, endY - camY);
+                ctx.stroke();
+                ctx.restore();
+                ctx.setLineDash([]);
+            }
+            hits(enemy) {
+                const vx = Math.cos(this.angle);
+                const vy = Math.sin(this.angle);
+                const dx = enemy.x - this.x;
+                const dy = enemy.y - this.y;
+                const proj = dx*vx + dy*vy;
+                if (proj < 0) return false;
+                const perpDist = Math.abs(dx*vy - dy*vx);
+                return perpDist < 20;
+            }
+        }
+
         function spawnManager() {
-            let spawnRate = Math.max(7, 83 - (player.level * 2) - Math.floor(timeSeconds / 10)); 
+            // if ceasefire active, skip spawning
+            if (player.ceasefireTimer > 0) return;
+            // enemies start off sparse and then slowly pick up pace as time passes
+            // base interval is high, then reduced by a small amount every 10 seconds and per level
+            const baseInterval = 150; // roughly 2.5 seconds at 60fps
+            const timeFactor = Math.floor(timeSeconds / 10);
+            const levelFactor = player.level * 2;
+            let spawnRate = Math.max(20, baseInterval - timeFactor - levelFactor);
             
             if (frame % spawnRate === 0) {
                 const rand = Math.random();
                 let isElite = rand < 0.01;
                 let isBoss = rand < 0.002; // MOST RARE
-                enemies.push(new Enemy(isElite, isBoss));
+                // small chance to spawn the new 5520 or 5526 variants
+                let variantRoll = Math.random();
+                let variant = null;
+                if (variantRoll < 0.025) variant = '5520';
+                else if (variantRoll < 0.04) variant = '5526';
+                enemies.push(new Enemy(isElite, isBoss, variant));
             }
             
             if (frame % 2500 === 0 && frame > 500) {
@@ -755,7 +1073,12 @@
             setTimeout(() => warning.style.display = 'none', 3000);
             const count = 20 + player.level;
             for(let i=0; i<count; i++) {
-                setTimeout(() => enemies.push(new Enemy(Math.random() < 0.05, false)), i * 70);
+                setTimeout(() => {
+                    const isElite = Math.random() < 0.05;
+                    const vr = Math.random();
+                    const variant = vr < 0.02 ? '5520' : (vr < 0.035 ? '5526' : null);
+                    enemies.push(new Enemy(isElite, false, variant));
+                }, i * 70);
             }
         }
 
@@ -772,6 +1095,8 @@
                 document.getElementById('time-display').innerText = `${m}:${s<10?'0'+s:s}`;
                 document.getElementById('coord-display').innerText = `${Math.floor(player.worldX)}, ${Math.floor(player.worldY)}`;
             }
+            if (player.ceasefireTimer > 0) player.ceasefireTimer--;
+            if (player.techTimer > 0) player.techTimer--;
 
             for (const key in buffs) {
                 if (buffs[key] > 0) buffs[key]--;
@@ -782,8 +1107,39 @@
             player.recoilX *= 0.8;
             player.recoilY *= 0.8;
 
+            // shield regeneration (and repulsion effect)
+            if (player.abilities.geoFencing > 0) {
+                if (player.shieldMax === 0) player.shieldMax = 50 * player.abilities.geoFencing;
+                if (player.shieldHP < player.shieldMax) {
+                    player.shieldHP += 0.1;
+                    if (player.shieldHP > player.shieldMax) player.shieldHP = player.shieldMax;
+                }
+                if (player.shieldHP > 0) {
+                    // push nearby enemies outward from the shield, but only occasionally and weakly
+                    enemies.forEach(e => {
+                        const d = Math.hypot(e.x - player.worldX, e.y - player.worldY);
+                        const shieldRadius = player.size + 30;
+                        if (d < shieldRadius && d > 0 && frame - e.lastRepelFrame > 20) {
+                            const ang = Math.atan2(e.y - player.worldY, e.x - player.worldX);
+                            const push = 0.15; // much weaker
+                            e.vx += Math.cos(ang) * push;
+                            e.vy += Math.sin(ang) * push;
+                            e.lastRepelFrame = frame;
+                        }
+                    });
+                }
+            }
+
             if (frame % 5 === 0 && player.speed > 2.5) { 
-                trail.push({x: player.worldX, y: player.worldY, life: 15});
+                const lvl = player.abilities.mobilePanel;
+                let color = '#3498db';
+                let dmg = 0;
+                if (lvl > 0) {
+                    dmg = lvl * 0.5;
+                    if (lvl >= 5) color = '#e74c3c';
+                    else if (lvl >= 3) color = '#f1c40f';
+                }
+                trail.push({x: player.worldX, y: player.worldY, life: 15, color, damage: dmg});
             }
             for(let i = trail.length - 1; i >= 0; i--) {
                 trail[i].life--;
@@ -792,6 +1148,7 @@
 
             let currentSpeed = player.speed;
             if (buffs.speed > 0) currentSpeed *= 1.5; 
+            if (player.abilities.mobilePanel > 0) currentSpeed *= 1 + (0.05 * player.abilities.mobilePanel);
 
             let dx = 0, dy = 0;
             if (keys['ArrowUp'] || keys['w']) dy = -currentSpeed;
@@ -806,6 +1163,7 @@
 
             let currentFireRate = player.fireRate;
             if (buffs.rapid > 0) currentFireRate = Math.max(5, Math.floor(currentFireRate * 0.5)); 
+            if (player.abilities.newDataset > 0) currentFireRate = Math.max(3, currentFireRate / (1 + 0.1 * player.abilities.newDataset));
 
             if (frame % Math.floor(currentFireRate) === 0) {
                 let nearest = null; let minDist = Infinity;
@@ -819,17 +1177,57 @@
                     player.recoilX = -Math.cos(shootAngle) * 8;
                     player.recoilY = -Math.sin(shootAngle) * 8;
 
-                    for(let i=0; i<player.projectileCount; i++) {
-                        const spread = (i - (player.projectileCount-1)/2) * 0.2; 
-                        bullets.push(new Bullet(player.worldX, player.worldY, nearest.x, nearest.y, spread));
+                    const lvlNew = player.abilities.newDataset;
+                    const multiLvl = player.abilities.crossShoppingAnalytics;
+                    const voidLvl = player.abilities.voidAnalysis;
+
+                    let angleOffsets = [0];
+                    if (multiLvl >= 1) angleOffsets.push(0.2, -0.2);
+                    if (multiLvl >= 3) angleOffsets.push(0.4, -0.4);
+                    if (multiLvl >= 5) {
+                        angleOffsets = [];
+                        for (let a = 0; a < 12; a++) angleOffsets.push((a/12)*Math.PI*2);
                     }
+
+                    angleOffsets.forEach(offset => {
+                        const b = new Bullet(player.worldX, player.worldY, nearest.x, nearest.y, offset);
+                        if (player.techTimer > 0) {
+                            // tech overdrive: lethal
+                            b.damageOverride = 999999;
+                            b.type = 'tech';
+                        } else {
+                            b.damageOverride = player.bulletDamage * (1 + 0.15 * lvlNew);
+                            b.visualLevel = lvlNew;
+                            b.type = 'newDataset';
+                            if (voidLvl > 0) { b.pierce = voidLvl * 2; b.type = voidLvl > 0 ? 'void' : 'newDataset'; b.visualLevel = voidLvl; }
+                        }
+                        bullets.push(b);
+                    });
                 }
+            }
+
+            // occasional void beam
+            if (player.abilities.voidAnalysis > 0 && frame % 300 === 0) {
+                const angle = Math.random() * Math.PI * 2;
+                voidBeams.push(new VoidBeam(angle, player.abilities.voidAnalysis));
             }
 
             bullets.forEach((b, i) => {
                 b.update();
                 if (b.life <= 0) bullets.splice(i, 1);
             });
+            // update and remove void beams
+            voidBeams.forEach((vb, i) => {
+                vb.update();
+                enemies.forEach(e => {
+                    if (!vb.hitEnemies.has(e) && vb.hits(e)) {
+                        e.hp -= 50;
+                        vb.hitEnemies.add(e);
+                    }
+                });
+                if (vb.life <= 0) voidBeams.splice(i, 1);
+            });
+
             enemies.forEach(e => e.update());
             damageNumbers.forEach((d, i) => {
                 d.update();
@@ -844,48 +1242,90 @@
 
             spawnManager();
             checkCollisions();
+
+            // make sure there are always some store locations available
+            if (frame % 600 === 0) ensureStores();
+
+            // aura damage + repulsion from True Trade Area
+            if (player.abilities.trueTradeArea > 0) {
+                const radius = player.abilities.trueTradeArea * 60;
+                enemies.forEach(e => {
+                    const dx = e.x - player.worldX;
+                    const dy = e.y - player.worldY;
+                    const d = Math.hypot(dx, dy);
+                    if (d < radius) {
+                        e.hp -= 0.2;
+                        if (d > 0 && frame - e.lastRepelFrame > 15) {
+                            const push = 0.1; // lighter effect
+                            e.vx += (dx / d) * push;
+                            e.vy += (dy / d) * push;
+                            e.lastRepelFrame = frame;
+                        }
+                    }
+                });
+            }
+
+            // drone management
+            if (player.abilities.forecasting > 0) {
+                const needed = player.abilities.forecasting >= 3 ? 2 : 1;
+                while (drones.length < needed) drones.push(new Drone(Math.random()*Math.PI*2));
+                while (drones.length > needed) drones.pop();
+                drones.forEach(d=> d.update());
+                if (frame % 30 === 0) {
+                    drones.forEach(d=> {
+                        let target = null; let minD = Infinity;
+                        enemies.forEach(e => {
+                            const dist = Math.hypot(e.x - player.worldX, e.y - player.worldY);
+                            if (dist < minD) { minD = dist; target = e; }
+                        });
+                        if (target) {
+                            const pos = d.getPosition();
+                            const db = new Bullet(pos.x, pos.y, target.x, target.y);
+                            db.type = 'drone';
+                            bullets.push(db);
+                        }
+                    });
+                }
+            }
+
             updateUI();
             frame++;
         }
 
         function checkCollisions() {
-            let currentDamage = player.bulletDamage;
-            if (buffs.damage > 0) currentDamage *= 2; 
-
+            // bullets hitting enemies
             for (let i = bullets.length - 1; i >= 0; i--) {
+                let b = bullets[i];
+                let currentDamage = b.damageOverride || player.bulletDamage;
+                if (buffs.damage > 0) currentDamage *= 2;
                 let hit = false;
                 for (let j = enemies.length - 1; j >= 0; j--) {
-                    const b = bullets[i]; const e = enemies[j];
+                    const e = enemies[j];
                     if (b.hitList.includes(e)) continue;
-
                     if (Math.hypot(b.x - e.x, b.y - e.y) < e.size) {
                         e.hp -= currentDamage;
-                        
                         const pushForce = 8;
                         const angle = Math.atan2(e.y - b.y, e.x - b.x);
                         e.vx += Math.cos(angle) * (pushForce / e.mass);
                         e.vy += Math.sin(angle) * (pushForce / e.mass);
-
                         b.hitList.push(e);
                         damageNumbers.push(new DamageText(e.x, e.y, Math.floor(currentDamage)));
-                        
                         playSound('hit');
-
                         if (e.hp <= 0) {
                             let gemColor = '#3498db';
                             if (e.isElite) gemColor = '#e74c3c';
-                            if (e.isBoss) gemColor = '#f1c40f'; // Gold gem for Boss
-                            
+                            if (e.isBoss) gemColor = '#f1c40f';
                             gems.push(new Gem(e.x, e.y, e.xpValue, gemColor));
-                            // Very rare chance to spawn the Pi collectible
-                            if (Math.random() < 0.002) {
-                                piPickups.push(new PiPickup(e.x, e.y));
+                            if (Math.random() < 0.01) { // slightly less rare
+                                // only spawn if no pi already visible
+                                if (!piPickups.some(p => isInView(p.x, p.y))) {
+                                    piPickups.push(new PiPickup(e.x, e.y));
+                                }
                             }
                             enemies.splice(j, 1);
                             score += e.xpValue;
                             document.getElementById('score-display').innerText = score;
                         }
-
                         if (b.pierce > 0) b.pierce--;
                         else { hit = true; break; }
                     }
@@ -893,15 +1333,36 @@
                 if (hit) bullets.splice(i, 1);
             }
 
+            // trail damage from mobile panel
+            if (player.abilities.mobilePanel > 0) {
+                for (let ti = trail.length - 1; ti >= 0; ti--) {
+                    const t = trail[ti];
+                    enemies.forEach(e => {
+                        if (Math.hypot(e.x - t.x, e.y - t.y) < player.size/2) {
+                            e.hp -= t.damage || 0;
+                        }
+                    });
+                }
+            }
+
             enemies.forEach(e => {
                 if (Math.hypot(player.worldX - e.x, player.worldY - e.y) < (player.size/2 + e.size/2)) {
                     const dmg = e.isBoss ? 5.0 : (e.isElite ? 2.0 : 0.5);
-                    player.hp -= dmg;
-                    screenShake = 12; 
-                    for(let k=0; k<15; k++) { particles.push(new Particle(player.worldX, player.worldY, '#676DFD')); }
-                    
+                    if (player.abilities.geoFencing > 0 && player.shieldHP > 0) {
+                        player.shieldHP -= dmg;
+                        if (player.shieldHP <= 0) {
+                            enemies.forEach(en => {
+                                const ang = Math.atan2(en.y - player.worldY, en.x - player.worldX);
+                                en.vx += Math.cos(ang) * 5;
+                                en.vy += Math.sin(ang) * 5;
+                            });
+                        }
+                    } else {
+                        player.hp -= dmg;
+                    }
+                    screenShake = 12;
+                    for (let k = 0; k < 15; k++) { particles.push(new Particle(player.worldX, player.worldY, '#676DFD')); }
                     if (frame % 10 === 0) playSound('hit');
-
                     if (player.hp <= 0) {
                         gameState = 'GAME_OVER';
                         document.getElementById('game-over').style.display = 'block';
@@ -949,6 +1410,7 @@
                 if (Math.hypot(player.worldX - p.x, player.worldY - p.y) < (player.size/2 + p.size/2)) {
                     explodeAllEnemies(player.worldX, player.worldY);
                     playSound('powerup');
+                    player.ceasefireTimer = 500; // ~8 seconds of no new enemies
                     piPickups.splice(i, 1);
                 }
             }
@@ -960,7 +1422,10 @@
                     switch(s.type) {
                         case 'coffee': buffs.speed = buffDuration; break;
                         case 'food': buffs.damage = buffDuration; break;
-                        case 'tech': buffs.rapid = buffDuration; break;
+                        case 'tech':
+                            // special lethal tech buff
+                            player.techTimer = buffDuration;
+                            break;
                         case 'retail': buffs.magnet = buffDuration; break;
                         case 'grocer': player.hp = Math.min(player.maxHp, player.hp + 50); break;
                     }
@@ -978,28 +1443,30 @@
             if (buffs.speed > 0) container.innerHTML += `<div class="buff-item">⚡ SPEED UP (${Math.ceil(buffs.speed/60)}s)</div>`;
             if (buffs.damage > 0) container.innerHTML += `<div class="buff-item">💪 DAMAGE UP (${Math.ceil(buffs.damage/60)}s)</div>`;
             if (buffs.rapid > 0) container.innerHTML += `<div class="buff-item">🔫 RAPID FIRE (${Math.ceil(buffs.rapid/60)}s)</div>`;
+            if (player.techTimer > 0) container.innerHTML += `<div class="buff-item">💥 TECH OVERDRIVE (${Math.ceil(player.techTimer/60)}s)</div>`;
             if (buffs.magnet > 0) container.innerHTML += `<div class="buff-item">🧲 MAGNET (${Math.ceil(buffs.magnet/60)}s)</div>`;
         }
 
         function updatePowersList() {
             const list = document.getElementById('powers-list');
-            list.innerHTML = ''; 
-            possibleUpgrades.forEach(u => {
-                if (u.count > 0) {
+            list.innerHTML = '';
+            for (const key in player.abilities) {
+                const lvl = player.abilities[key];
+                if (lvl > 0) {
+                    const info = abilityInfo[key];
                     const div = document.createElement('div');
                     div.className = 'power-item';
-                    const iconHtml = AbilityIcons[u.iconId] || '';
-                    div.innerHTML = `<span class="power-icon">${iconHtml}</span> ${u.name} <span class="power-count">x${u.count}</span>`;
+                    const iconHtml = AbilityIcons[key] || '';
+                    div.innerHTML = `<span class="power-icon">${iconHtml}</span> ${info.name} Lv.${lvl}`;
                     list.appendChild(div);
                 }
-            });
+            }
         }
 
         function selectUpgrade(index) {
-            const c = currentUpgradeChoices[index];
-            if (c) {
-                c.apply();
-                c.count++;
+            const choice = currentUpgradeChoices[index];
+            if (choice) {
+                player.abilities[choice.id] = Math.min(abilityInfo[choice.id].maxLevel, player.abilities[choice.id] + 1);
                 updatePowersList();
                 document.getElementById('upgrade-screen').style.display = 'none';
                 gameState = 'PLAYING';
@@ -1022,26 +1489,29 @@
             player.xpToNextLevel = Math.floor(player.xpToNextLevel * 1.3);
             document.getElementById('level-display').innerText = player.level + '.0';
             
-            const screen = document.getElementById('upgrade-screen');
+            const available = Object.values(abilityInfo).filter(a => player.abilities[a.id] < a.maxLevel);
+            const choices = [];
+            while (choices.length < 3 && available.length > 0) {
+                const idx = Math.floor(Math.random() * available.length);
+                choices.push(available.splice(idx, 1)[0]);
+            }
+            currentUpgradeChoices = choices;
+            selectedUpgradeIndex = 0;
+
             const container = document.getElementById('cards-container');
             container.innerHTML = '';
-            
-            const shuffled = [...possibleUpgrades].sort(() => 0.5 - Math.random());
-            currentUpgradeChoices = shuffled.slice(0, 3);
-            selectedUpgradeIndex = 1;
-
             currentUpgradeChoices.forEach((c, index) => {
                 const card = document.createElement('div');
                 card.className = 'card';
                 card.onclick = () => selectUpgrade(index);
                 card.onmouseenter = () => { selectedUpgradeIndex = index; updateCardSelectionVisuals(); };
-                const iconHtml = AbilityIcons[c.iconId] || '';
-                card.innerHTML = `<h3>${iconHtml} ${c.name}</h3><p>${c.desc}</p>`;
+                const iconHtml = AbilityIcons[c.id] || '';
+                const nextLevel = player.abilities[c.id] + 1;
+                card.innerHTML = `<div class="card-icon">${iconHtml}</div><h3>${c.name}</h3><p>${c.mechanic}</p><p>${c.getImprovement(nextLevel)}</p>`;
                 container.appendChild(card);
             });
-            
             updateCardSelectionVisuals();
-            screen.style.display = 'flex';
+            document.getElementById('upgrade-screen').style.display = 'flex';
         }
 
         function updateUI() {
@@ -1059,6 +1529,7 @@
                 ctx.translate(Math.random() * screenShake - screenShake/2, Math.random() * screenShake - screenShake/2);
             }
 
+            // grid
             ctx.strokeStyle = '#3E44C6';
             ctx.lineWidth = 1;
             ctx.beginPath();
@@ -1088,10 +1559,47 @@
                 }
             }
 
+            // aura visualization
+            if (player.abilities.trueTradeArea > 0) {
+                const radius = player.abilities.trueTradeArea * 60;
+                ctx.save();
+                ctx.globalAlpha = 0.3;
+                if (player.abilities.trueTradeArea >= 3) {
+                    const grad = ctx.createRadialGradient(canvas.width/2, canvas.height/2, radius*0.2, canvas.width/2, canvas.height/2, radius);
+                    grad.addColorStop(0, 'red');
+                    grad.addColorStop(1, 'blue');
+                    ctx.fillStyle = grad;
+                } else {
+                    ctx.fillStyle = 'rgba(0,0,255,0.2)';
+                }
+                ctx.beginPath();
+                ctx.arc(canvas.width/2, canvas.height/2, radius, 0, Math.PI*2);
+                ctx.fill();
+                ctx.restore();
+                if (player.abilities.trueTradeArea >=5) {
+                    const sweepAngle = (frame * 0.05) % (Math.PI*2);
+                    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+                    ctx.beginPath();
+                    ctx.moveTo(canvas.width/2, canvas.height/2);
+                    ctx.lineTo(canvas.width/2 + Math.cos(sweepAngle)*radius, canvas.height/2 + Math.sin(sweepAngle)*radius);
+                    ctx.stroke();
+                }
+            }
+
+            // trail & footsteps
             trail.forEach(t => {
+                const alpha = t.life / 20;
                 if (playerSprite.complete) {
-                    ctx.globalAlpha = t.life / 20; 
+                    ctx.globalAlpha = alpha;
                     ctx.drawImage(playerSprite, t.x - camX - player.size/2, t.y - camY - player.size/2, player.size, player.size);
+                    ctx.globalAlpha = 1.0;
+                }
+                if (t.color) {
+                    ctx.fillStyle = t.color;
+                    ctx.globalAlpha = alpha;
+                    ctx.beginPath();
+                    ctx.arc(t.x - camX, t.y - camY, 6, 0, Math.PI*2);
+                    ctx.fill();
                     ctx.globalAlpha = 1.0;
                 }
             });
@@ -1100,10 +1608,14 @@
             piPickups.forEach(p => p.draw(ctx, camX, camY));
             storeLocations.forEach(h => h.draw(ctx, camX, camY));
             gems.forEach(g => g.draw(ctx, camX, camY));
+            voidBeams.forEach(vb => vb.draw(ctx, camX, camY));
             bullets.forEach(b => b.draw(ctx, camX, camY));
             enemies.forEach(e => e.draw(ctx, camX, camY));
             damageNumbers.forEach(d => d.draw(ctx, camX, camY));
             particles.forEach(p => p.draw(ctx, camX, camY));
+
+            // drones
+            drones.forEach(d => d.draw(ctx, camX, camY));
 
             if (playerSprite.complete && playerSprite.naturalWidth !== 0) {
                 ctx.drawImage(playerSprite, (canvas.width/2) - player.size/2 + player.recoilX, (canvas.height/2) - player.size/2 + player.recoilY, player.size, player.size);
@@ -1111,6 +1623,53 @@
                 ctx.fillStyle = '#676DFD';
                 ctx.fillRect((canvas.width/2) - player.size/2 + player.recoilX, (canvas.height/2) - player.size/2 + player.recoilY, player.size, player.size);
             }
+
+            // shield visual
+            if (player.abilities.geoFencing > 0 && player.shieldHP > 0) {
+                const lvl = player.abilities.geoFencing;
+                const radius = player.size;
+                ctx.save();
+                ctx.translate(canvas.width/2, canvas.height/2);
+                if (lvl >= 5) {
+                    ctx.strokeStyle='rgba(0,200,255,0.5)';
+                    ctx.lineWidth=2;
+                    for(let i=0;i<6;i++){
+                        ctx.rotate(Math.PI/3);
+                        ctx.beginPath();
+                        ctx.moveTo(radius,0);
+                        ctx.lineTo(radius*1.2,0);
+                        ctx.stroke();
+                    }
+                }
+                ctx.beginPath();
+                if (lvl >= 3) {
+                    ctx.fillStyle='rgba(0,150,255,0.2)';
+                    ctx.arc(0,0,radius+10,0,Math.PI*2);
+                    ctx.fill();
+                }
+                ctx.strokeStyle='rgba(0,200,255,0.8)';
+                ctx.setLineDash([5,5]);
+                ctx.arc(0,0,radius+15,0,Math.PI*2);
+                ctx.stroke();
+                ctx.restore();
+                ctx.setLineDash([]);
+            }
+
+            // forecasting max webs
+            if (player.abilities.forecasting >= 5) {
+                const originX = canvas.width/2;
+                const originY = canvas.height/2 - 60;
+                ctx.strokeStyle = 'rgba(0,255,255,0.7)';
+                enemies.sort((a,b)=>Math.hypot(a.x-player.worldX,a.y-player.worldY)-Math.hypot(b.x-player.worldX,b.y-player.worldY));
+                for (let i=0; i<Math.min(5,enemies.length); i++) {
+                    const e = enemies[i];
+                    ctx.beginPath();
+                    ctx.moveTo(originX, originY);
+                    ctx.lineTo(e.x - camX, e.y - camY);
+                    ctx.stroke();
+                }
+            }
+
             ctx.restore();
         }
 
