@@ -227,6 +227,35 @@
         @media (max-width: 900px), (hover: none) {
             #mobile-controls { display: block; }
         }
+            /* Responsive UI panel for mobile */
+            @media (max-width: 600px), (hover: none) {
+                #ui {
+                    padding: 6px 8px;
+                    font-size: 10px;
+                    min-width: unset;
+                    max-width: 70vw;
+                    width: auto;
+                    top: 6px;
+                    left: 6px;
+                }
+                #ui h1,
+                #ui .label,
+                #ui .info-row {
+                    display: none;
+                }
+                #ui .bar-container {
+                    width: 90px;
+                    height: 10px;
+                    margin-bottom: 4px;
+                }
+                #powers-list, #active-buffs {
+                    gap: 2px;
+                }
+                .power-item {
+                    font-size: 10px;
+                    padding: 2px 4px;
+                }
+            }
     </style>
 </head>
 <body>
@@ -275,10 +304,10 @@
     <!-- Mobile arrow controls (visible on narrow / touch devices) -->
     <div id="mobile-controls" aria-hidden="true">
         <div class="arrow-grid">
-            <div id="arrow-up" class="arrow-btn arrow-up">▲</div>
-            <div id="arrow-left" class="arrow-btn arrow-left">◀</div>
-            <div id="arrow-right" class="arrow-btn arrow-right">▶</div>
-            <div id="arrow-down" class="arrow-btn arrow-down">▼</div>
+            <div id="arrow-up" class="arrow-btn arrow-up">⬆️</div>
+            <div id="arrow-left" class="arrow-btn arrow-left">⬅️</div>
+            <div id="arrow-right" class="arrow-btn arrow-right">➡️</div>
+            <div id="arrow-down" class="arrow-btn arrow-down">⬇️</div>
         </div>
     </div>
 
